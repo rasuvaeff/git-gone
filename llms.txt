@@ -1,0 +1,175 @@
+# git-gone
+
+Rust CLI that deletes local Git branches whose remote branch no longer exists
+(`[gone]`), in a single repository or across every nested repository in a tree.
+Invocable as `git-gone` or `git gone` (Git discovers `git-*` on `PATH`).
+
+## Install
+
+```bash
+# Linux/macOS, latest installer and latest release asset
+curl -fsSL https://raw.githubusercontent.com/rasuvaeff/git-gone/master/scripts/install.sh | sh
+
+# Linux/macOS, pinned installer and release asset
+VERSION=v0.1.0
+curl -fsSL "https://raw.githubusercontent.com/rasuvaeff/git-gone/${VERSION}/scripts/install.sh" | VERSION="$VERSION" sh
+
+# Windows (PowerShell), latest installer and latest release asset
+irm https://raw.githubusercontent.com/rasuvaeff/git-gone/master/scripts/install.ps1 | iex
+
+# Windows, pinned installer and release asset
+$env:VERSION = "v0.1.0"
+irm "https://raw.githubusercontent.com/rasuvaeff/git-gone/$env:VERSION/scripts/install.ps1" | iex
+
+# Cargo — the crate is `git-gone-multi` (`git-gone` is taken), the binary is `git-gone`
+cargo install git-gone-multi
+
+# From source
+cargo install --git https://github.com/rasuvaeff/git-gone
+```
+
+Requires `git` 2.7+ on `PATH`.
+
+## Rules
+
+- Runs `git fetch --prune` first unless `--no-fetch`; without it a branch deleted
+  on the remote elsewhere still has a local tracking ref and is not detected.
+- Detection is locale-independent: all upstream refs are resolved in one
+  `git cat-file --batch-check` call (`<upstream>^{commit}` queries); an
+  unresolvable ref means gone. The `[gone]` string from `git branch -vv` is
+  translated by Git and is never matched.
+- A branch checked out in ANY worktree (`git worktree list --porcelain`), not just
+  the current `HEAD`, is never a deletion candidate.
+- Branches matching `git config gone.protect` patterns (or `--protect`; `*` wildcard)
+  are never deletion candidates; the skip is announced on stderr.
+- Listings mark branches whose commits no other ref reaches: `feature-x (2 unmerged
+  commits)` — what the forced delete would actually lose (best-effort).
+- Deletion uses `git branch -D -- <name>` (forced; `--` so a ref named `-x` is not
+  parsed as an option) and prints the dropped short SHA: `Deleted branch: x (was 4f2a1c9)`.
+  A restore hint (`git branch <name> <sha>`) follows every run that deleted something.
+- Branch names with TAB or non-UTF-8 bytes are skipped with a stderr warning, never
+  reported as gone: a lossy name resolves to no ref and would look gone.
+- Without `--yes` and without a TTY on stdin, deletion is refused (exit 1).
+- `--json` implies report mode (never deletes), always prints a document, and
+  conflicts with `--yes` (which it would otherwise silently ignore).
+- `--depth`, `--exclude` and `--jobs` require `-r`. `--depth 0` = the scan root only;
+  the root is always inspected.
+- `--root PATH` selects the tree scanned by `-r` without changing the current directory.
+- `--safe` uses `git branch -d` and keeps branches Git does not consider merged; the
+  default remains forced `git branch -D`.
+- `--include-reasons` requires `--json` and adds a `reasons` array with each gone
+  branch's upstream and best-effort unique-commit count. Existing JSON fields do
+  not change.
+- Under `-r`, fetches run in parallel (`-j`, default CPUs capped at 8); a progress
+  line is shown only when stderr is a terminal. Report order stays deterministic.
+- A recursive repository's `.git` metadata and `commondir` must resolve within the
+  scan root. An escaped gitfile/symlink fails the scan rather than redirecting Git
+  commands to an unrelated repository.
+- `--allow-external-git-dir` is the explicit trusted-tree opt-in for linked
+  worktrees whose Git metadata is outside `--root`.
+- A failed recursive fetch is shown in report modes as `fetch_error`, but that
+  repository has no deletion candidates in a normal or `--yes` run; the command
+  exits `1` after a failed refresh.
+- `git config gone.exclude` sits between the built-in exclude default and the
+  `--exclude` flag (each level replaces the one below); `gone.protect` is additive
+  with `--protect`.
+- Under `-r`, `GIT_TERMINAL_PROMPT=0` is set for `git fetch`: no credential prompt can
+  block the batch. This covers Git's own prompts only — `ssh` may still ask for a key
+  passphrase or host-key confirmation; use an `ssh-agent` or `--no-fetch`.
+- `-r` runs `git fetch` inside every discovered repository, which executes that
+  repository's own config (e.g. `core.sshCommand`). Do not run it over untrusted
+  clones, or pass `--no-fetch`.
+
+## CLI
+
+| Flag | Short | Effect |
+|---|---|---|
+| `--recursive` | `-r` | Operate on every nested Git repository under the current directory |
+| `--root PATH` | | Directory tree to scan with `-r` (default: current directory) |
+| `--depth N` | | Max scan depth with `-r` (`0` = scan root only, `1` = direct subdirectories); default unlimited |
+| `--exclude a,b` | | Directory names to skip; **replaces** `git config gone.exclude` and the default list `target,vendor,node_modules,.cache,build,dist` |
+| `--jobs N` | `-j` | Repositories fetched in parallel with `-r` (default: CPUs, capped at 8) |
+| `--safe` | | Delete only branches Git considers merged (`git branch -d`) |
+| `--protect a,b` | | Branch name patterns (`*` wildcard) never deleted; adds to `git config gone.protect` |
+| `--json` | | Machine-readable report on stdout; no deletion; conflicts with `--yes` |
+| `--include-reasons` | | Add upstream and unmerged-commit details to `--json` |
+| `--allow-external-git-dir` | | Allow linked-worktree metadata outside `--root` with `-r` |
+| `--list` | `-l` | Print gone branches, delete nothing |
+| `--dry-run` | `-n` | Show what would be deleted |
+| `--yes` | `-y` | Skip the confirmation prompt |
+| `--no-fetch` | | Skip the initial `git fetch --prune` |
+| `--version` / `--help` | `-V` / `-h` | clap-generated |
+
+Human-readable output goes to stderr; deletions and JSON go to stdout.
+
+## Exit codes
+
+- `0` — deleted / nothing to delete / report mode.
+- `1` — aborted at the prompt, refused without a TTY, a deletion failed, a
+  recursive fetch failed before a destructive run, a repo could not be inspected
+  under `-r`, a directory could not be read during the scan, or a fatal error.
+  Under `-r --json` the document is still printed in full, but a per-repository
+  `error` (or an unreadable directory) also sets the exit code to `1`. A fatal
+  error before any report (not a repository, failed `git fetch` in single-repo
+  mode) exits `1` with no JSON on stdout.
+
+## Examples
+
+```bash
+git gone                      # fetch --prune, list, confirm, delete
+git gone --list               # report only
+git gone -y                   # unattended (CI)
+git gone -r --dry-run         # whole tree, nothing deleted
+git gone -r --json | jq '.repositories[] | select(.error != null)'
+git gone -r --depth 1 --exclude target,build -y
+```
+
+## JSON schemas
+
+The JSON shape is a public contract under SemVer: fields are only added in minor
+versions, never renamed or removed outside a major.
+
+Single repository:
+
+```json
+{"gone": ["feature-x", "refactor/auth"], "skipped": []}
+```
+
+Multi-repo (`-r --json`):
+
+```json
+{
+  "repositories": [
+    {"path": "pkg-a", "gone": ["feat/x"], "skipped": [], "error": null, "fetch_error": null},
+    {"path": "pkg-broken", "gone": [], "skipped": [], "error": "`git for-each-ref` failed in …", "fetch_error": null}
+  ],
+  "total_gone": 1
+}
+```
+
+`path` is relative to the scan root (the root itself is `.`). `error` is `null`
+for a healthy repository; a repository that could not be inspected always
+carries a message, so an empty `gone` never masks a failure. `skipped` carries
+branch names that could not be parsed (non-UTF-8/TAB) — never candidates, never
+silent. `fetch_error` carries a failed `git fetch --prune` (offline, dead
+remote): detection still ran but on possibly stale tracking refs — `"gone": []`
+next to a `fetch_error` is stale, not verified-clean. A `fetch_error` alone does
+not change the exit code in report modes, but it blocks destructive recursive
+deletion for that repository. Protected branches are excluded from `gone` entirely.
+With `--include-reasons`, each healthy repository additionally has `reasons`:
+`[{"branch":"feature-x","upstream":"refs/remotes/origin/feature-x","unmerged_commits":2}]`.
+
+## Development
+
+```bash
+cargo fmt --all -- --check
+cargo clippy --all-targets --locked -- -D warnings
+cargo test --all --locked
+```
+
+Source layout: `cli.rs` (flags), `git.rs` (git invocations + detection parser),
+`scan.rs` (directory walk), `report.rs` (per-repo outcome), `json.rs` (documents),
+`run.rs` (single/multi modes), `main.rs` (dispatch). `#![forbid(unsafe_code)]`.
+
+Rust 1.85+, edition 2024, dependencies: `clap`, `anyhow` (dev: `tempfile`).
+All git access goes through `std::process::Command` — no `git2`/`gix`.
