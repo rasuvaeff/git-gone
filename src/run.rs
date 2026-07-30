@@ -40,6 +40,11 @@ pub(crate) fn single(work: &Path, cli: &Cli) -> Result<u8> {
         return Ok(0);
     }
 
+    if cli.safe {
+        let safe = retain_merged_branches(work, &mut detection);
+        note_safe_skipped(&safe);
+    }
+
     let gone = detection.gone;
     if gone.is_empty() {
         eprintln!("No gone branches to delete.");
@@ -99,7 +104,11 @@ pub(crate) fn multi(root: &Path, cli: &Cli) -> Result<u8> {
         eprintln!("Scanning {} repositories...", scan.repos.len());
     }
 
-    let report = inspect_repos(&scan.repos, root, cli);
+    let mut report = inspect_repos(&scan.repos, root, cli);
+    if cli.safe && !cli.json {
+        let safe = retain_merged_report_branches(&mut report);
+        note_safe_skipped(&safe);
+    }
     let destructive = !cli.json && !cli.is_report_only();
     let total = if destructive {
         report::total_deletable_gone(&report)
@@ -320,6 +329,70 @@ fn note_protected(protected: &[String], repo: Option<&str>) {
     match repo {
         Some(rel) => eprintln!("Protected branches skipped in {rel}: {names}"),
         None => eprintln!("Protected branches skipped: {names}"),
+    }
+}
+
+struct SafeFilter {
+    unmerged: usize,
+    errors: Vec<String>,
+}
+
+fn retain_merged_report_branches(report: &mut [RepoReport]) -> SafeFilter {
+    let mut safe = SafeFilter {
+        unmerged: 0,
+        errors: Vec::new(),
+    };
+    for repo in report {
+        if repo.fetch_error.is_some() {
+            continue;
+        }
+        let Some(detection) = repo.result.as_mut().ok() else {
+            continue;
+        };
+        let result = retain_merged_branches(&repo.path, detection);
+        safe.unmerged += result.unmerged;
+        safe.errors.extend(result.errors);
+    }
+
+    safe
+}
+
+fn retain_merged_branches(work: &Path, detection: &mut Detection) -> SafeFilter {
+    let mut safe = SafeFilter {
+        unmerged: 0,
+        errors: Vec::new(),
+    };
+    let mut kept = Vec::with_capacity(detection.gone.len());
+    for branch in std::mem::take(&mut detection.gone) {
+        match git::is_merged_into_head(work, &branch) {
+            Ok(true) => kept.push(branch),
+            Ok(false) => safe.unmerged += 1,
+            Err(e) => {
+                safe.errors.push(format!(
+                    "could not check whether {branch} is merged in {}: {e:#}",
+                    work.display()
+                ));
+                safe.unmerged += 1;
+            }
+        }
+    }
+    detection.gone = kept;
+    detection
+        .upstreams
+        .retain(|branch, _| detection.gone.contains(branch));
+
+    safe
+}
+
+fn note_safe_skipped(safe: &SafeFilter) {
+    if safe.unmerged > 0 {
+        eprintln!(
+            "Safe mode skipped {} branch(es) not merged into HEAD.",
+            safe.unmerged
+        );
+    }
+    for error in &safe.errors {
+        eprintln!("Warning: {error}");
     }
 }
 

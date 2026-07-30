@@ -2,7 +2,7 @@
 # The crate name `git-gone` on crates.io is taken by an unrelated project; the
 # binary keeps the `git-gone` name via [[bin]] so the `git gone` alias works.
 name = "git-gone-multi"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 rust-version = "1.85"
 authors = ["Victor Razuvaev <rasuvaeff@gmail.com>"]

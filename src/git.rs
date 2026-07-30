@@ -125,6 +125,27 @@ pub(crate) fn delete_branch(work: &Path, name: &str, mode: DeleteMode) -> Result
     Ok(())
 }
 
+/// Returns whether `branch` is reachable from the current `HEAD`, which is the safety
+/// condition used by `git branch -d` when the branch's upstream no longer resolves.
+/// A non-zero status of 1 is Git's documented "not an ancestor" answer; other failures
+/// are operational errors and must not be mistaken for a branch safe to delete.
+pub(crate) fn is_merged_into_head(work: &Path, branch: &str) -> Result<bool> {
+    let refname = format!("refs/heads/{branch}");
+    let status = Command::new(GIT)
+        .args(["merge-base", "--is-ancestor", &refname, "HEAD"])
+        .current_dir(work)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .with_context(|| format!("failed to check whether {branch} is merged"))?;
+
+    match status.code() {
+        Some(0) => Ok(true),
+        Some(1) => Ok(false),
+        _ => bail!("`git merge-base --is-ancestor {refname} HEAD` exited with status {status}"),
+    }
+}
+
 /// Short SHA a branch points at, for the ` (was …)` suffix that keeps a forced delete
 /// recoverable from the reflog. `None` when the branch cannot be resolved.
 /// The full `refs/heads/` form is queried: it is unambiguous against a same-named tag, and

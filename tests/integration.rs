@@ -762,12 +762,14 @@ fn a_branch_whose_name_starts_with_a_dash_is_deleted() {
 }
 
 #[test]
-fn safe_mode_refuses_to_delete_an_unmerged_branch() {
+fn safe_mode_skips_an_unmerged_branch_before_deletion() {
     let (_tmp, work) = repo_with_gone_branch();
 
-    let (ok, _out, err) = gone_bin(&work, &["--yes", "--safe", "--no-fetch"]);
+    let (ok, out, err) = gone_bin(&work, &["--yes", "--safe", "--no-fetch"]);
 
-    assert!(!ok, "safe mode must reject unmerged work; stderr: {err}");
+    assert!(ok, "safe mode must skip unmerged work; stderr: {err}");
+    assert!(out.is_empty(), "stdout: {out}");
+    assert!(err.contains("Safe mode skipped 1 branch(es) not merged into HEAD."));
     assert!(branches(&work).iter().any(|b| b == "feature-x"));
 }
 
@@ -788,6 +790,20 @@ fn safe_mode_deletes_a_merged_branch() {
     assert!(out.contains("Deleted branch: merged-x"), "stdout: {out}");
     assert!(!branches(&work).iter().any(|b| b == "merged-x"));
     assert!(branches(&work).iter().any(|b| b == "feature-x"));
+}
+
+#[test]
+fn recursive_safe_mode_skips_unmerged_branches_before_confirmation() {
+    let tmp = setup_monorepo();
+    let root = tmp.path();
+
+    let (ok, out, err) = gone_bin(root, &["-r", "--yes", "--safe", "--no-fetch"]);
+
+    assert!(ok, "safe mode must skip unmerged work; stderr: {err}");
+    assert!(out.is_empty(), "stdout: {out}");
+    assert!(err.contains("Safe mode skipped 2 branch(es) not merged into HEAD."));
+    assert!(branches(&root.join("pkg-a")).iter().any(|b| b == "feat-a"));
+    assert!(branches(&root.join("pkg-b")).iter().any(|b| b == "feat-b"));
 }
 
 /// A gone branch checked out in another worktree cannot be deleted by Git, so it must not

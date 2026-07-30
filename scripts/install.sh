@@ -8,7 +8,7 @@
 #   curl -fsSL ... | INSTALL_DIR=$HOME/bin sh
 #
 # To pin both this script and its release asset, fetch this file from a release tag:
-#   VERSION=v0.1.0
+#   VERSION=v0.1.1
 #   curl -fsSL "https://raw.githubusercontent.com/rasuvaeff/git-gone/${VERSION}/scripts/install.sh" | VERSION="$VERSION" sh
 set -eu
 

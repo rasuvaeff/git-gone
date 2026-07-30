@@ -73,8 +73,8 @@ CI passes `--locked` too: the release build already did, and the mismatch let
   (e.g. `echo y | git-gone`) refuses to delete, to avoid accidental mass
   deletion in scripts. Pass `--yes` explicitly for CI.
 - **`git branch -D` (forced delete).** Gone branches have already lost their
-  remote; `-D` matches user intent. A future `--safe` mode should switch to `-d`
-  (merged-only) — do not change the default. The deletion message is printed by
+  remote; `-D` matches user intent. `--safe` pre-filters branches not merged into
+  `HEAD`, then switches to `-d` (merged-only) — do not change the default. The deletion message is printed by
   this tool with the short SHA read *before* the delete (`(was 4f2a1c9)`), and
   Git's own stdout is silenced: Git translates its message, and the SHA is the
   recovery handle for a forced delete.
@@ -176,9 +176,9 @@ CI passes `--locked` too: the release build already did, and the mismatch let
   `llms.txt`): fields are only added in minors. `skipped` is part of the
   document — unparsable names must reach machine consumers, not only stderr.
 - **Root and deletion modes.** `--root PATH` selects the recursive scan tree
-  and requires `-r`. `--safe` switches deletion from `git branch -D` to
-  `git branch -d`, preserving unmerged branches. The default stays forced to
-  preserve the original public contract.
+  and requires `-r`. `--safe` removes branches not merged into `HEAD` from the
+  report before switching deletion from `git branch -D` to `git branch -d`. The
+  default stays forced to preserve the original public contract.
 - **Minimum git is 2.7** (`git worktree list --porcelain`) — documented in the
   install sections; do not adopt newer git features without bumping that line.
 - **Multi-repo scan (`-r`) descends past a found repo.** Unlike a submodule

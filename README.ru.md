@@ -71,7 +71,7 @@ curl -fsSL https://raw.githubusercontent.com/rasuvaeff/git-gone/master/scripts/i
 и installer, и release asset можно, получив installer из тега релиза:
 
 ```bash
-VERSION=v0.1.0
+VERSION=v0.1.1
 curl -fsSL "https://raw.githubusercontent.com/rasuvaeff/git-gone/${VERSION}/scripts/install.sh" | VERSION="$VERSION" sh
 ```
 
@@ -89,7 +89,7 @@ irm https://raw.githubusercontent.com/rasuvaeff/git-gone/master/scripts/install.
 installer, и release asset можно так:
 
 ```powershell
-$env:VERSION = "v0.1.0"
+$env:VERSION = "v0.1.1"
 irm "https://raw.githubusercontent.com/rasuvaeff/git-gone/$env:VERSION/scripts/install.ps1" | iex
 ```
 
@@ -169,7 +169,7 @@ git gone -r --root ~/src --dry-run
 | `--depth N` | | Макс. глубина сканирования с `-r` (`0` = только корень сканирования, `1` = прямые поддиректории; по умолчанию без лимита). Сам корень осматривается всегда |
 | `--exclude a,b,c` | | Имена каталогов через запятую для пропуска (заменяет `git config gone.exclude` и умолчание `target,vendor,node_modules,.cache,build,dist`) |
 | `--jobs N` | `-j` | Сколько репозиториев фетчить параллельно при `-r` (по умолчанию: число CPU, максимум 8) |
-| `--safe` | | Использовать `git branch -d`: удалять только ветки, которые Git считает смерженными (по умолчанию форсированный `-D`) |
+| `--safe` | | Отсеять ветки, не смёрженные в `HEAD`, затем использовать `git branch -d` (по умолчанию форсированный `-D`) |
 | `--protect a,b` | | Паттерны имён веток (wildcard `*`), которые никогда не являются кандидатами на удаление; добавляется к `git config gone.protect` |
 | `--json` | | JSON-отчёт (подразумевает режим отчёта: без удаления; конфликтует с `--yes`) |
 | `--include-reasons` | | Добавить upstream и число непересекающихся коммитов в вывод `--json` |
@@ -265,9 +265,10 @@ tracking-ссылках: `"gone": []` рядом с `fetch_error` — это *у
   неудачный fetch фиксируется в JSON-поле `fetch_error`, а отчёты могут
   показать устаревшие кандидаты. Но удаление этот репозиторий пропускает и
   завершается с кодом `1`.
-- **Безопасный режим:** `--safe` вызывает `git branch -d` и сохраняет ветку,
-  которую Git не считает смерженной. По умолчанию остаётся `git branch -D`, так
-  как gone-ветку уже нельзя смержить в удалённый upstream.
+- **Безопасный режим:** `--safe` сначала отсекает ветки, не смёрженные в `HEAD`,
+  поэтому отчёт и подтверждение содержат только ветки, удаляемые через `git branch -d`.
+  По умолчанию остаётся `git branch -D`, так как gone-ветку уже нельзя смержить в
+  удалённый upstream.
 - **Fetch при `-r` параллельный** (`-j`, по умолчанию число CPU с потолком 8) —
   фаза fetch упирается в сеть и доминирует по времени. Прогресс
   (`[12/58] pkg-a`) показывается, когда stderr — терминал. Детекция локальна и
