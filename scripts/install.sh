@@ -140,4 +140,4 @@ esac
 
 printf '==> Installed: '
 "${dest}/git-gone" --version
-printf '\nRun "git gone --help" to get started.\n'
+printf '\nRun "git-gone --help" (or "git gone -h") to get started.\n'

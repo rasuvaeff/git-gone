@@ -92,5 +92,5 @@ if ($entries -notcontains $InstallDir.TrimEnd('\')) {
 Write-Host "==> Installed:"
 & $binPath --version
 Write-Host ""
-Write-Host "Run 'git gone --help' to get started."
+Write-Host "Run 'git-gone --help' (or 'git gone -h') to get started."
 Write-Host "(If 'git gone' is not found, open a new terminal so PATH is refreshed.)"
