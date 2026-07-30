@@ -7,7 +7,7 @@
 #   $env:INSTALL_DIR = "C:\Tools"; irm ... | iex
 #
 # To pin both this script and its release asset, fetch this file from a release tag:
-#   $env:VERSION = "v0.1.1"; irm "https://raw.githubusercontent.com/rasuvaeff/git-gone/$env:VERSION/scripts/install.ps1" | iex
+#   $env:VERSION = "v0.2.0"; irm "https://raw.githubusercontent.com/rasuvaeff/git-gone/$env:VERSION/scripts/install.ps1" | iex
 $ErrorActionPreference = "Stop"
 
 $Owner = "rasuvaeff"

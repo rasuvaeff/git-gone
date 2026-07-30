@@ -40,9 +40,9 @@ pub(crate) fn single(work: &Path, cli: &Cli) -> Result<u8> {
         return Ok(0);
     }
 
-    if cli.safe {
-        let safe = retain_merged_branches(work, &mut detection);
-        note_safe_skipped(&safe);
+    if let Some(mode) = safety_mode(cli) {
+        let safe = retain_safe_branches(work, &mut detection, mode);
+        note_safe_skipped(&safe, mode);
     }
 
     let gone = detection.gone;
@@ -105,9 +105,9 @@ pub(crate) fn multi(root: &Path, cli: &Cli) -> Result<u8> {
     }
 
     let mut report = inspect_repos(&scan.repos, root, cli);
-    if cli.safe && !cli.json {
-        let safe = retain_merged_report_branches(&mut report);
-        note_safe_skipped(&safe);
+    if let Some(mode) = safety_mode(cli).filter(|_| !cli.json) {
+        let safe = retain_safe_report_branches(&mut report, mode);
+        note_safe_skipped(&safe, mode);
     }
     let destructive = !cli.json && !cli.is_report_only();
     let total = if destructive {
@@ -332,14 +332,30 @@ fn note_protected(protected: &[String], repo: Option<&str>) {
     }
 }
 
-struct SafeFilter {
-    unmerged: usize,
+#[derive(Clone, Copy)]
+enum SafetyMode {
+    Merged,
+    ExactTree,
+}
+
+struct SafetyFilter {
+    skipped: usize,
     errors: Vec<String>,
 }
 
-fn retain_merged_report_branches(report: &mut [RepoReport]) -> SafeFilter {
-    let mut safe = SafeFilter {
-        unmerged: 0,
+const fn safety_mode(cli: &Cli) -> Option<SafetyMode> {
+    if cli.safe {
+        Some(SafetyMode::Merged)
+    } else if cli.squash_safe {
+        Some(SafetyMode::ExactTree)
+    } else {
+        None
+    }
+}
+
+fn retain_safe_report_branches(report: &mut [RepoReport], mode: SafetyMode) -> SafetyFilter {
+    let mut safe = SafetyFilter {
+        skipped: 0,
         errors: Vec::new(),
     };
     for repo in report {
@@ -349,31 +365,63 @@ fn retain_merged_report_branches(report: &mut [RepoReport]) -> SafeFilter {
         let Some(detection) = repo.result.as_mut().ok() else {
             continue;
         };
-        let result = retain_merged_branches(&repo.path, detection);
-        safe.unmerged += result.unmerged;
+        let result = retain_safe_branches(&repo.path, detection, mode);
+        safe.skipped += result.skipped;
         safe.errors.extend(result.errors);
     }
 
     safe
 }
 
-fn retain_merged_branches(work: &Path, detection: &mut Detection) -> SafeFilter {
-    let mut safe = SafeFilter {
-        unmerged: 0,
+fn retain_safe_branches(work: &Path, detection: &mut Detection, mode: SafetyMode) -> SafetyFilter {
+    let mut safe = SafetyFilter {
+        skipped: 0,
         errors: Vec::new(),
+    };
+    let head_trees = match mode {
+        SafetyMode::Merged => None,
+        SafetyMode::ExactTree => match git::head_trees(work) {
+            Ok(trees) => Some(trees),
+            Err(e) => {
+                safe.errors.push(format!(
+                    "could not enumerate trees reachable from HEAD in {}: {e:#}",
+                    work.display()
+                ));
+                None
+            }
+        },
     };
     let mut kept = Vec::with_capacity(detection.gone.len());
     for branch in std::mem::take(&mut detection.gone) {
-        match git::is_merged_into_head(work, &branch) {
-            Ok(true) => kept.push(branch),
-            Ok(false) => safe.unmerged += 1,
-            Err(e) => {
-                safe.errors.push(format!(
-                    "could not check whether {branch} is merged in {}: {e:#}",
-                    work.display()
-                ));
-                safe.unmerged += 1;
-            }
+        let keep = match mode {
+            SafetyMode::Merged => match git::is_merged_into_head(work, &branch) {
+                Ok(merged) => merged,
+                Err(e) => {
+                    safe.errors.push(format!(
+                        "could not check whether {branch} is merged in {}: {e:#}",
+                        work.display()
+                    ));
+                    false
+                }
+            },
+            SafetyMode::ExactTree => match &head_trees {
+                Some(trees) => match git::branch_tree(work, &branch) {
+                    Ok(tree) => trees.contains(&tree),
+                    Err(e) => {
+                        safe.errors.push(format!(
+                            "could not resolve the tree of {branch} in {}: {e:#}",
+                            work.display()
+                        ));
+                        false
+                    }
+                },
+                None => false,
+            },
+        };
+        if keep {
+            kept.push(branch);
+        } else {
+            safe.skipped += 1;
         }
     }
     detection.gone = kept;
@@ -384,12 +432,18 @@ fn retain_merged_branches(work: &Path, detection: &mut Detection) -> SafeFilter 
     safe
 }
 
-fn note_safe_skipped(safe: &SafeFilter) {
-    if safe.unmerged > 0 {
-        eprintln!(
-            "Safe mode skipped {} branch(es) not merged into HEAD.",
-            safe.unmerged
-        );
+fn note_safe_skipped(safe: &SafetyFilter, mode: SafetyMode) {
+    if safe.skipped > 0 {
+        match mode {
+            SafetyMode::Merged => eprintln!(
+                "Safe mode skipped {} branch(es) not merged into HEAD.",
+                safe.skipped
+            ),
+            SafetyMode::ExactTree => eprintln!(
+                "Squash-safe mode skipped {} branch(es) whose final tree is not reachable from HEAD.",
+                safe.skipped
+            ),
+        }
     }
     for error in &safe.errors {
         eprintln!("Warning: {error}");

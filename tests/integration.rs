@@ -73,6 +73,24 @@ fn repo_with_gone_branch() -> (TempDir, PathBuf) {
     (tmp, work)
 }
 
+/// Adds a gone branch whose final file tree was reproduced on `main` by a different commit,
+/// modeling a squash merge. Its changes are present, but its commit is not an ancestor of HEAD.
+fn add_squash_merged_gone_branch(work: &Path) {
+    git(work, &["checkout", "-b", "squash-x"]);
+    fs::write(work.join("squash.txt"), "same contents\n").unwrap();
+    git(work, &["add", "."]);
+    git(work, &["commit", "-m", "feature implementation"]);
+    git(work, &["push", "-u", "origin", "squash-x"]);
+
+    git(work, &["checkout", "main"]);
+    fs::write(work.join("squash.txt"), "same contents\n").unwrap();
+    git(work, &["add", "."]);
+    git(work, &["commit", "-m", "squash feature implementation"]);
+    git(work, &["push"]);
+    git(work, &["push", "origin", "--delete", "squash-x"]);
+    git(work, &["fetch", "--prune"]);
+}
+
 fn path(p: &Path) -> String {
     p.to_str().unwrap().to_string()
 }
@@ -793,6 +811,23 @@ fn safe_mode_deletes_a_merged_branch() {
 }
 
 #[test]
+fn squash_safe_mode_deletes_an_exact_tree_match() {
+    let (_tmp, work) = repo_with_gone_branch();
+    add_squash_merged_gone_branch(&work);
+
+    let (ok, out, err) = gone_bin(&work, &["--yes", "--squash-safe", "--no-fetch"]);
+
+    assert!(
+        ok,
+        "squash-safe mode must delete exact tree matches; stderr: {err}"
+    );
+    assert!(out.contains("Deleted branch: squash-x"), "stdout: {out}");
+    assert!(!branches(&work).iter().any(|b| b == "squash-x"));
+    assert!(branches(&work).iter().any(|b| b == "feature-x"));
+    assert!(err.contains("Squash-safe mode skipped 1 branch(es)"));
+}
+
+#[test]
 fn recursive_safe_mode_skips_unmerged_branches_before_confirmation() {
     let tmp = setup_monorepo();
     let root = tmp.path();
@@ -804,6 +839,22 @@ fn recursive_safe_mode_skips_unmerged_branches_before_confirmation() {
     assert!(err.contains("Safe mode skipped 2 branch(es) not merged into HEAD."));
     assert!(branches(&root.join("pkg-a")).iter().any(|b| b == "feat-a"));
     assert!(branches(&root.join("pkg-b")).iter().any(|b| b == "feat-b"));
+}
+
+#[test]
+fn recursive_squash_safe_mode_deletes_an_exact_tree_match() {
+    let (tmp, work) = repo_with_gone_branch();
+    add_squash_merged_gone_branch(&work);
+
+    let (ok, out, err) = gone_bin(tmp.path(), &["-r", "--yes", "--squash-safe", "--no-fetch"]);
+
+    assert!(
+        ok,
+        "squash-safe mode must delete exact tree matches; stderr: {err}"
+    );
+    assert!(out.contains("Deleted repo/squash-x"), "stdout: {out}");
+    assert!(!branches(&work).iter().any(|b| b == "squash-x"));
+    assert!(branches(&work).iter().any(|b| b == "feature-x"));
 }
 
 /// A gone branch checked out in another worktree cannot be deleted by Git, so it must not

@@ -178,6 +178,8 @@ CI passes `--locked` too: the release build already did, and the mismatch let
 - **Root and deletion modes.** `--root PATH` selects the recursive scan tree
   and requires `-r`. `--safe` removes branches not merged into `HEAD` from the
   report before switching deletion from `git branch -D` to `git branch -d`. The
+  `--squash-safe` instead accepts only an exact final-tree match in `HEAD` history,
+  then uses `git branch -D`; never weaken this to patch-similarity heuristics. The
   default stays forced to preserve the original public contract.
 - **Minimum git is 2.7** (`git worktree list --porcelain`) — documented in the
   install sections; do not adopt newer git features without bumping that line.

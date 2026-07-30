@@ -71,7 +71,7 @@ curl -fsSL https://raw.githubusercontent.com/rasuvaeff/git-gone/master/scripts/i
 и installer, и release asset можно, получив installer из тега релиза:
 
 ```bash
-VERSION=v0.1.1
+VERSION=v0.2.0
 curl -fsSL "https://raw.githubusercontent.com/rasuvaeff/git-gone/${VERSION}/scripts/install.sh" | VERSION="$VERSION" sh
 ```
 
@@ -89,7 +89,7 @@ irm https://raw.githubusercontent.com/rasuvaeff/git-gone/master/scripts/install.
 installer, и release asset можно так:
 
 ```powershell
-$env:VERSION = "v0.1.1"
+$env:VERSION = "v0.2.0"
 irm "https://raw.githubusercontent.com/rasuvaeff/git-gone/$env:VERSION/scripts/install.ps1" | iex
 ```
 
@@ -170,6 +170,7 @@ git gone -r --root ~/src --dry-run
 | `--exclude a,b,c` | | Имена каталогов через запятую для пропуска (заменяет `git config gone.exclude` и умолчание `target,vendor,node_modules,.cache,build,dist`) |
 | `--jobs N` | `-j` | Сколько репозиториев фетчить параллельно при `-r` (по умолчанию: число CPU, максимум 8) |
 | `--safe` | | Отсеять ветки, не смёрженные в `HEAD`, затем использовать `git branch -d` (по умолчанию форсированный `-D`) |
+| `--squash-safe` | | Отсеять ветки, чьё финальное дерево не совпадает в точности с commit из истории `HEAD`, затем удалить совпадения через `git branch -D`; конфликтует с `--safe` |
 | `--protect a,b` | | Паттерны имён веток (wildcard `*`), которые никогда не являются кандидатами на удаление; добавляется к `git config gone.protect` |
 | `--json` | | JSON-отчёт (подразумевает режим отчёта: без удаления; конфликтует с `--yes`) |
 | `--include-reasons` | | Добавить upstream и число непересекающихся коммитов в вывод `--json` |
@@ -269,6 +270,10 @@ tracking-ссылках: `"gone": []` рядом с `fetch_error` — это *у
   поэтому отчёт и подтверждение содержат только ветки, удаляемые через `git branch -d`.
   По умолчанию остаётся `git branch -D`, так как gone-ветку уже нельзя смержить в
   удалённый upstream.
+- **Режим squash merge:** `--squash-safe` допускает ветку, только если её финальное
+  Git-дерево в точности совпадает с commit из истории `HEAD`. Это покрывает squash merge
+  без эвристик по похожести патчей; проверенный ref удаляется через `git branch -D`, потому
+  что ancestry-проверка `-d` не распознаёт squash merge.
 - **Fetch при `-r` параллельный** (`-j`, по умолчанию число CPU с потолком 8) —
   фаза fetch упирается в сеть и доминирует по времени. Прогресс
   (`[12/58] pkg-a`) показывается, когда stderr — терминал. Детекция локальна и

@@ -11,14 +11,14 @@ Invocable as `git-gone` or `git gone` (Git discovers `git-*` on `PATH`).
 curl -fsSL https://raw.githubusercontent.com/rasuvaeff/git-gone/master/scripts/install.sh | sh
 
 # Linux/macOS, pinned installer and release asset
-VERSION=v0.1.1
+VERSION=v0.2.0
 curl -fsSL "https://raw.githubusercontent.com/rasuvaeff/git-gone/${VERSION}/scripts/install.sh" | VERSION="$VERSION" sh
 
 # Windows (PowerShell), latest installer and latest release asset
 irm https://raw.githubusercontent.com/rasuvaeff/git-gone/master/scripts/install.ps1 | iex
 
 # Windows, pinned installer and release asset
-$env:VERSION = "v0.1.1"
+$env:VERSION = "v0.2.0"
 irm "https://raw.githubusercontent.com/rasuvaeff/git-gone/$env:VERSION/scripts/install.ps1" | iex
 
 # Cargo — the crate is `git-gone-multi` (`git-gone` is taken), the binary is `git-gone`
@@ -57,6 +57,9 @@ Requires `git` 2.7+ on `PATH`.
 - `--root PATH` selects the tree scanned by `-r` without changing the current directory.
 - `--safe` pre-filters branches not merged into `HEAD`, then uses `git branch -d`;
   the default remains forced `git branch -D`.
+- `--squash-safe` accepts only branches whose final tree exactly matches a commit
+  reachable from `HEAD`, then deletes that verified ref with `git branch -D`; it
+  conflicts with `--safe` and must never use patch-similarity heuristics.
 - `--include-reasons` requires `--json` and adds a `reasons` array with each gone
   branch's upstream and best-effort unique-commit count. Existing JSON fields do
   not change.
@@ -90,6 +93,7 @@ Requires `git` 2.7+ on `PATH`.
 | `--exclude a,b` | | Directory names to skip; **replaces** `git config gone.exclude` and the default list `target,vendor,node_modules,.cache,build,dist` |
 | `--jobs N` | `-j` | Repositories fetched in parallel with `-r` (default: CPUs, capped at 8) |
 | `--safe` | | Pre-filter branches not merged into `HEAD`, then use `git branch -d` |
+| `--squash-safe` | | Delete only exact final-tree matches in `HEAD` history with `git branch -D` |
 | `--protect a,b` | | Branch name patterns (`*` wildcard) never deleted; adds to `git config gone.protect` |
 | `--json` | | Machine-readable report on stdout; no deletion; conflicts with `--yes` |
 | `--include-reasons` | | Add upstream and unmerged-commit details to `--json` |

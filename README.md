@@ -70,7 +70,7 @@ explicitly set `INSTALL_DIR` fails instead of installing elsewhere). To pin both
 the installer and its release asset, fetch the installer from the release tag:
 
 ```bash
-VERSION=v0.1.1
+VERSION=v0.2.0
 curl -fsSL "https://raw.githubusercontent.com/rasuvaeff/git-gone/${VERSION}/scripts/install.sh" | VERSION="$VERSION" sh
 ```
 
@@ -87,7 +87,7 @@ Installs to `%LOCALAPPDATA%\Programs\git-gone` (override with `$env:INSTALL_DIR`
 and adds it to the user `PATH`. To pin both the installer and its release asset:
 
 ```powershell
-$env:VERSION = "v0.1.1"
+$env:VERSION = "v0.2.0"
 irm "https://raw.githubusercontent.com/rasuvaeff/git-gone/$env:VERSION/scripts/install.ps1" | iex
 ```
 
@@ -167,6 +167,7 @@ git gone -r --root ~/src --dry-run
 | `--exclude a,b,c` | | Comma-separated dir names to skip during scan (replaces `git config gone.exclude` and the default `target,vendor,node_modules,.cache,build,dist`) |
 | `--jobs N` | `-j` | Repositories fetched in parallel with `-r` (default: available CPUs, capped at 8) |
 | `--safe` | | Pre-filter branches not merged into `HEAD`, then use `git branch -d` (default is forced `-D`) |
+| `--squash-safe` | | Pre-filter branches whose final tree does not exactly match a commit reachable from `HEAD`, then delete matches with `git branch -D`; conflicts with `--safe` |
 | `--protect a,b` | | Branch name patterns (`*` wildcard) that are never deletion candidates; adds to `git config gone.protect` |
 | `--json` | | Machine-readable JSON report (implies report mode: no deletion; conflicts with `--yes`) |
 | `--include-reasons` | | Add upstream and unmerged-commit details to `--json` output |
@@ -263,6 +264,10 @@ report mode, but the repository is excluded from a destructive `-r` run:
 - **Safe mode:** `--safe` pre-filters branches not merged into `HEAD`, so its report
   and confirmation only contain branches it can delete with `git branch -d`. The default
   remains `git branch -D`, because a gone remote branch cannot be merged there later.
+- **Squash-safe mode:** `--squash-safe` accepts a branch only when its final Git tree
+  exactly matches a commit reachable from `HEAD`. This covers squash merges without
+  guessing from patch similarity; it deletes the verified ref with `git branch -D` because
+  Git's ancestry-only `-d` check cannot recognize a squash merge.
 - **Fetches run in parallel under `-r`** (`-j`, default: available CPUs capped
   at 8) — the fetch phase is network-bound and dominates the wall clock. A
   progress line (`[12/58] pkg-a`) is shown when stderr is a terminal. Detection

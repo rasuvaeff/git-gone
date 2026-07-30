@@ -60,8 +60,12 @@ pub(crate) struct Cli {
     pub(crate) jobs: Option<NonZeroUsize>,
 
     /// Delete only branches Git considers fully merged (`git branch -d`).
-    #[arg(long)]
+    #[arg(long, conflicts_with = "squash_safe")]
     pub(crate) safe: bool,
+
+    /// Delete branches whose final tree exactly matches a commit reachable from HEAD.
+    #[arg(long, conflicts_with = "safe")]
+    pub(crate) squash_safe: bool,
 
     /// Permit nested Git metadata that resolves outside `--root` (for linked worktrees).
     #[arg(long, requires = "recursive")]
@@ -136,6 +140,12 @@ mod tests {
         assert!(Cli::try_parse_from(["git-gone", "--json", "--yes"]).is_err());
         assert!(Cli::try_parse_from(["git-gone", "--json"]).is_ok());
         assert!(Cli::try_parse_from(["git-gone", "--json", "--list"]).is_ok());
+    }
+
+    #[test]
+    fn safe_modes_conflict() {
+        assert!(Cli::try_parse_from(["git-gone", "--safe", "--squash-safe"]).is_err());
+        assert!(Cli::try_parse_from(["git-gone", "--squash-safe"]).is_ok());
     }
 
     #[test]

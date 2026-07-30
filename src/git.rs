@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 use std::io::Write;
 use std::path::Path;
 use std::process::{Command, Stdio};
@@ -144,6 +144,52 @@ pub(crate) fn is_merged_into_head(work: &Path, branch: &str) -> Result<bool> {
         Some(1) => Ok(false),
         _ => bail!("`git merge-base --is-ancestor {refname} HEAD` exited with status {status}"),
     }
+}
+
+/// Tree IDs of every commit reachable from `HEAD`. Equal tree IDs prove that two commits
+/// describe the exact same repository contents, even when a squash merge broke ancestry.
+pub(crate) fn head_trees(work: &Path) -> Result<HashSet<String>> {
+    let out = Command::new(GIT)
+        .args(["log", "--format=%T", "HEAD"])
+        .current_dir(work)
+        .output()
+        .context("failed to enumerate trees reachable from HEAD")?;
+    if !out.status.success() {
+        bail!(
+            "`git log --format=%T HEAD` exited with status {} in {}: {}",
+            out.status,
+            work.display(),
+            String::from_utf8_lossy(&out.stderr).trim()
+        );
+    }
+
+    Ok(String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .map(String::from)
+        .collect())
+}
+
+/// Tree ID of a local branch. The full refname avoids ambiguity with a same-named tag and
+/// permits branch names beginning with `-`.
+pub(crate) fn branch_tree(work: &Path, branch: &str) -> Result<String> {
+    let refname = format!("refs/heads/{branch}^{{tree}}");
+    let out = Command::new(GIT)
+        .args(["rev-parse", "--verify", "--quiet", &refname])
+        .current_dir(work)
+        .output()
+        .with_context(|| format!("failed to resolve the tree of {branch}"))?;
+    if !out.status.success() {
+        bail!(
+            "`git rev-parse --verify --quiet {refname}` exited with status {}",
+            out.status
+        );
+    }
+    let tree = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    if tree.is_empty() {
+        bail!("`git rev-parse --verify --quiet {refname}` returned no tree");
+    }
+
+    Ok(tree)
 }
 
 /// Short SHA a branch points at, for the ` (was …)` suffix that keeps a forced delete
